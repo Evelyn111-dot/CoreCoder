@@ -4,10 +4,13 @@ import queue
 import threading
 import uuid
 
-from fastapi import FastAPI, HTTPException
+from fastapi import (
+    FastAPI,
+    HTTPException,
+)
 from fastapi.responses import StreamingResponse
 
-from corecoder import LLM, Agent
+from corecoder import Agent, LLM
 from corecoder.rag import (
     DashScopeEmbedder,
     RagPipeline,
@@ -21,6 +24,7 @@ from corecoder.tools.knowledge import (
     KnowledgeSearchTool,
 )
 
+from .database import Database
 from .schemas import (
     ChatRequest,
     IngestRequest,
@@ -33,6 +37,7 @@ from .services import (
 )
 from .settings import Settings
 
+
 log = logging.getLogger(__name__)
 
 
@@ -43,6 +48,14 @@ def create_app(
     settings = (
         settings
         or Settings.from_env()
+    )
+
+    database = Database(
+        host=settings.mysql_host,
+        port=settings.mysql_port,
+        user=settings.mysql_user,
+        password=settings.mysql_password,
+        database=settings.mysql_database,
     )
 
     llm = LLM(
@@ -81,7 +94,9 @@ def create_app(
             max_context_tokens=(
                 settings.agent_max_context_tokens
             ),
-            max_rounds=settings.agent_max_rounds,
+            max_rounds=(
+                settings.agent_max_rounds
+            ),
         )
 
     sessions = SessionService(
@@ -100,6 +115,7 @@ def create_app(
 
     app.state.sessions = sessions
     app.state.knowledge = knowledge
+    app.state.database = database
 
     @app.get("/health")
     def health():
@@ -119,6 +135,7 @@ def create_app(
                 body.chunk_size,
                 body.chunk_overlap,
             )
+
         except (
             ValueError,
             FileNotFoundError,
@@ -219,7 +236,9 @@ def create_app(
                     )
 
                 events.put(
-                    {"type": "done"}
+                    {
+                        "type": "done",
+                    }
                 )
 
             except Exception:
@@ -253,6 +272,7 @@ def create_app(
                     event = events.get(
                         timeout=15
                     )
+
                 except queue.Empty:
                     yield ": heartbeat\n\n"
                     continue

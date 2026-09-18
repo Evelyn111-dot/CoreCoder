@@ -60,6 +60,7 @@ target-version = "py310"
 
 server = [
     "fastapi>=0.115,<1.0",
+    "pymysql>=1.1,<2.0",
     "pydantic-settings>=2.7,<3.0",
     "requests>=2.32,<3.0",
     "uvicorn[standard]>=0.30,<1.0",

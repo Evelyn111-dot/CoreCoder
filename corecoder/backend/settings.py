@@ -1,7 +1,10 @@
 from pathlib import Path
 
 from pydantic import Field, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    SettingsConfigDict,
+)
 
 
 class Settings(BaseSettings):
@@ -21,6 +24,33 @@ class Settings(BaseSettings):
     app_name: str = Field(
         default="CoreCoder RAG API",
         validation_alias="APP_NAME",
+    )
+
+    mysql_host: str = Field(
+        default="127.0.0.1",
+        validation_alias="MYSQL_HOST",
+    )
+
+    mysql_port: int = Field(
+        default=3306,
+        ge=1,
+        le=65_535,
+        validation_alias="MYSQL_PORT",
+    )
+
+    mysql_user: str = Field(
+        default="root",
+        validation_alias="MYSQL_USER",
+    )
+
+    mysql_password: str = Field(
+        default="",
+        validation_alias="MYSQL_PASSWORD",
+    )
+
+    mysql_database: str = Field(
+        default="corecoder",
+        validation_alias="MYSQL_DATABASE",
     )
 
     api_key: str = Field(
@@ -86,9 +116,11 @@ class Settings(BaseSettings):
             raise ValueError(
                 "RAG_TOP_K 不能大于 RAG_MAX_TOP_K"
             )
+
         return self
 
     @classmethod
     def from_env(cls):
         """保留原调用方式，并由 Pydantic 完成环境变量加载。"""
+
         return cls()
