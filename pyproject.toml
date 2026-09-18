@@ -39,7 +39,12 @@ packages = ["corecoder"]
 
 [project.optional-dependencies]
 litellm = ["litellm>=1.60.0,<2.0.0"]
-dev = ["pytest>=7.0", "ruff>=0.9.0"]
+dev = [
+    "httpx>=0.27,<1.0",
+    "pytest>=7.0",
+    "requests>=2.32,<3.0",
+    "ruff>=0.9.0",
+]
 
 [project.scripts]
 corecoder = "corecoder.cli:main"
@@ -52,3 +57,10 @@ Issues = "https://github.com/he-yufeng/CoreCoder/issues"
 [tool.ruff]
 line-length = 130
 target-version = "py310"
+
+server = [
+    "fastapi>=0.115,<1.0",
+    "pydantic-settings>=2.7,<3.0",
+    "requests>=2.32,<3.0",
+    "uvicorn[standard]>=0.30,<1.0",
+]
