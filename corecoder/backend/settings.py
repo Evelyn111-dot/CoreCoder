@@ -76,6 +76,13 @@ class Settings(BaseSettings):
         validation_alias="KNOWLEDGE_DIR",
     )
 
+    max_upload_size_mb: int = Field(
+        default=20,
+        ge=1,
+        le=200,
+        validation_alias="MAX_UPLOAD_SIZE_MB",
+    )
+
     rag_top_k: int = Field(
         default=5,
         ge=1,
@@ -108,6 +115,14 @@ class Settings(BaseSettings):
         default=128_000,
         ge=1_000,
         validation_alias="AGENT_MAX_CONTEXT_TOKENS",
+    )
+
+    knowledge_storage_dir: Path = Path("knowledge")
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
     )
 
     @model_validator(mode="after")

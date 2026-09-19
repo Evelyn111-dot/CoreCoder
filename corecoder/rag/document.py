@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-import re
+from typing import ClassVar
 
 
 @dataclass
@@ -530,17 +531,25 @@ class CodeChunker(BaseChunker):
 class ChunkerFactory:
     """根据文件类型创建 Chunker。"""
 
-    MARKDOWN_SUFFIXES = {
+    MARKDOWN_SUFFIXES: ClassVar[
+        set[str]
+    ] = {
         ".md",
         ".markdown",
+        ".docx",
     }
 
-    TEXT_SUFFIXES = {
+    TEXT_SUFFIXES: ClassVar[
+        set[str]
+    ] = {
         ".txt",
         ".text",
+        ".pdf",
     }
 
-    CODE_SUFFIXES = {
+    CODE_SUFFIXES: ClassVar[
+        set[str]
+    ] = {
         ".py",
         ".java",
         ".js",
@@ -552,6 +561,46 @@ class ChunkerFactory:
         ".hpp",
         ".rs",
     }
+
+    @classmethod
+    def create(
+        cls,
+        file_path: str,
+        chunk_size: int = 800,
+        chunk_overlap: int = 100,
+    ) -> BaseChunker:
+        suffix = (
+            Path(file_path)
+            .suffix
+            .lower()
+        )
+
+        kwargs = {
+            "chunk_size": chunk_size,
+            "chunk_overlap": (
+                chunk_overlap
+            ),
+        }
+
+        if (
+            suffix
+            in cls.MARKDOWN_SUFFIXES
+        ):
+            return MarkdownChunker(
+                **kwargs
+            )
+
+        if (
+            suffix
+            in cls.CODE_SUFFIXES
+        ):
+            return CodeChunker(
+                **kwargs
+            )
+
+        return TextChunker(
+            **kwargs
+        )
 
     @classmethod
     def create(
@@ -580,9 +629,11 @@ class ChunkerFactory:
 def load_document(
     file_path: str,
 ) -> Document:
-    """加载文档。"""
+    """根据文件类型加载文档。"""
 
-    path = Path(file_path)
+    path = Path(
+        file_path
+    )
 
     if not path.exists():
         raise FileNotFoundError(
@@ -594,19 +645,198 @@ def load_document(
             f"不是文件: {file_path}"
         )
 
-    content = path.read_text(
-        encoding="utf-8"
+    suffix = (
+        path.suffix.lower()
     )
+
+    supported_suffixes = (
+        ChunkerFactory.MARKDOWN_SUFFIXES
+        | ChunkerFactory.TEXT_SUFFIXES
+        | ChunkerFactory.CODE_SUFFIXES
+    )
+
+    if (
+        suffix
+        not in supported_suffixes
+    ):
+        raise ValueError(
+            "不支持的文件类型: "
+            f"{suffix or '无扩展名'}"
+        )
+
+    extra_metadata = {}
+
+    if suffix == ".pdf":
+        (
+            content,
+            extra_metadata,
+        ) = _load_pdf(path)
+
+    elif suffix == ".docx":
+        (
+            content,
+            extra_metadata,
+        ) = _load_docx(path)
+
+    else:
+        content = path.read_text(
+            encoding="utf-8"
+        )
+
+    if not content.strip():
+        raise ValueError(
+            "文件中没有可提取的文本: "
+            f"{path.name}"
+        )
 
     return Document(
         content=content,
         source=str(path),
         metadata={
             "file_name": path.name,
-            "file_type": path.suffix.lower(),
+            "file_type": suffix,
+            **extra_metadata,
         },
     )
 
+def _load_pdf(
+    path: Path,
+) -> tuple[str, dict]:
+    """提取文字型 PDF，并保留页码边界。"""
+
+    from pypdf import PdfReader
+
+    reader = PdfReader(
+        str(path)
+    )
+
+    pages = []
+
+    for (
+        page_number,
+        page,
+    ) in enumerate(
+        reader.pages,
+        1,
+    ):
+        text = (
+            page.extract_text()
+            or ""
+        ).strip()
+
+        if text:
+            pages.append(
+                f"[第 {page_number} 页]\n"
+                f"{text}"
+            )
+
+    return (
+        "\n\n".join(pages),
+        {
+            "page_count": (
+                len(reader.pages)
+            ),
+        },
+    )
+
+def _load_docx(
+    path: Path,
+) -> tuple[str, dict]:
+    """提取 DOCX 标题、段落和表格。"""
+
+    from docx import (
+        Document as DocxDocument,
+    )
+
+    document = DocxDocument(
+        str(path)
+    )
+
+    blocks = []
+
+    for paragraph in (
+        document.paragraphs
+    ):
+        text = (
+            paragraph.text.strip()
+        )
+
+        if not text:
+            continue
+
+        style_name = (
+            paragraph.style.name
+            if paragraph.style
+            else ""
+        )
+
+        if style_name.startswith(
+            "Heading "
+        ):
+            try:
+                level = int(
+                    style_name.removeprefix(
+                        "Heading "
+                    )
+                )
+            except ValueError:
+                level = 1
+
+            level = min(
+                max(level, 1),
+                6,
+            )
+
+            blocks.append(
+                f"{'#' * level} "
+                f"{text}"
+            )
+        else:
+            blocks.append(
+                text
+            )
+
+    for (
+        table_index,
+        table,
+    ) in enumerate(
+        document.tables,
+        1,
+    ):
+        rows = []
+
+        for row in table.rows:
+            values = [
+                cell.text.strip()
+                for cell
+                in row.cells
+            ]
+
+            rows.append(
+                " | ".join(values)
+            )
+
+        if rows:
+            blocks.append(
+                f"## 表格 {table_index}\n"
+                + "\n".join(rows)
+            )
+
+    return (
+        "\n\n".join(blocks),
+        {
+            "paragraph_count": (
+                len(
+                    document.paragraphs
+                )
+            ),
+            "table_count": (
+                len(
+                    document.tables
+                )
+            ),
+        },
+    )
 
 def split_document(
     document: Document,

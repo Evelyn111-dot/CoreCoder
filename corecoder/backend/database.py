@@ -46,7 +46,7 @@ class Database:
     def transaction(
         self,
     ) -> Generator[Connection, None, None]:
-        """成功时提交，异常时回滚，最后关闭连接。"""
+        """成功提交，异常回滚，最后关闭连接。"""
 
         connection = self.connect()
 
@@ -66,7 +66,7 @@ class Database:
         sql: str,
         params: Sequence[Any] | None = None,
     ) -> int:
-        """执行 INSERT、UPDATE 或 DELETE，返回受影响行数。"""
+        """执行增删改语句，返回受影响行数。"""
 
         with (
             self.transaction() as connection,
@@ -75,6 +75,26 @@ class Database:
             return cursor.execute(
                 sql,
                 params,
+            )
+
+    def insert(
+        self,
+        sql: str,
+        params: Sequence[Any] | None = None,
+    ) -> int:
+        """执行 INSERT 并返回自增主键。"""
+
+        with (
+            self.transaction() as connection,
+            connection.cursor() as cursor,
+        ):
+            cursor.execute(
+                sql,
+                params,
+            )
+
+            return int(
+                cursor.lastrowid
             )
 
     def fetch_one(
